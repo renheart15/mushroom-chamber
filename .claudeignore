@@ -1,0 +1,15 @@
+﻿# Flutter build artifacts
+build/
+.dart_tool/
+.packages
+.metadata
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Test files with Unicode
+test/widget_test.dart
