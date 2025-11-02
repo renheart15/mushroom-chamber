@@ -1,128 +1,244 @@
-# Mushroom Monitoring Backend API
+# Mushroom Chamber Backend API
 
-Backend API server for the Mushroom Cultivation Monitoring System. Provides REST API endpoints and WebSocket support for real-time sensor data.
+Cloud backend service for the Mushroom Chamber IoT monitoring system. Built with Node.js, Express, and MongoDB.
 
 ## Features
 
-- REST API for sensor data and actuator control
-- WebSocket server for real-time updates
-- MongoDB Atlas integration
-- ESP32 sensor integration
-- CORS enabled for mobile app integration
+- RESTful API for sensor data and actuator control
+- Real-time WebSocket updates
+- MongoDB data persistence
+- Rate limiting and security with Helmet
+- Automatic data retention management
 
-## Tech Stack
+## Prerequisites
 
-- Node.js
-- Express.js
-- MongoDB (Mongoose)
-- WebSocket (ws)
-- Helmet (security)
-- Morgan (logging)
+- Node.js 18+
+- MongoDB Atlas account (free tier works fine)
+- Render account (for deployment)
 
-## API Endpoints
+## Setup Instructions
 
-### Sensors
-- `GET /api/sensors` - Get all sensor readings (paginated)
-- `GET /api/sensors/latest` - Get latest sensor reading
-- `GET /api/sensors/range?startDate=&endDate=` - Get readings by time range
-- `GET /api/sensors/stats?hours=24` - Get sensor statistics
-- `POST /api/sensors` - Add new sensor reading (ESP32)
-- `DELETE /api/sensors/:id` - Delete a reading
+### 1. MongoDB Atlas Setup
 
-### Actuators
-- `GET /api/actuators` - Get all actuator commands
-- `GET /api/actuators/pending` - Get pending commands (ESP32 polling)
-- `POST /api/actuators` - Send command to actuator
-- `PUT /api/actuators/:id/status` - Update command status
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register)
+2. Create a free account and sign in
+3. Create a new cluster:
+   - Choose **FREE** tier (M0 Sandbox)
+   - Select a cloud provider and region (choose nearest to your location)
+   - Name your cluster (e.g., "mushroom-cluster")
+   - Click **Create Cluster** (takes 3-5 minutes)
 
-### System
-- `GET /api/system/status` - Get system status
-- `GET /api/system/info` - Get system information
-- `POST /api/system/calibrate` - Calibrate sensors
-- `GET /api/health` - Health check endpoint
+4. Create a Database User:
+   - Go to **Database Access** (left sidebar)
+   - Click **Add New Database User**
+   - Choose **Password** authentication
+   - Username: `mushroomuser` (or any name you want)
+   - Password: Generate a strong password and **save it**
+   - Database User Privileges: **Read and write to any database**
+   - Click **Add User**
 
-## WebSocket Events
+5. Configure Network Access:
+   - Go to **Network Access** (left sidebar)
+   - Click **Add IP Address**
+   - Click **Allow Access from Anywhere** (or add `0.0.0.0/0`)
+   - Click **Confirm**
 
-Connect to `ws://[host]/ws`
+6. Get Connection String:
+   - Go to **Database** (left sidebar)
+   - Click **Connect** on your cluster
+   - Choose **Connect your application**
+   - Select **Driver: Node.js** and **Version: 5.5 or later**
+   - Copy the connection string (looks like):
+     ```
+     mongodb+srv://mushroomuser:<password>@cluster.xxxxx.mongodb.net/?retryWrites=true&w=majority
+     ```
+   - Replace `<password>` with your actual database user password
+   - Add database name after `.net/`: change to `...mongodb.net/mushroom_chamber?retryWrites...`
 
-### Incoming Events:
-- `sensor_update` - New sensor data available
-- `actuator_command` - New actuator command
-- `actuator_status` - Command status update
-- `calibration` - Calibration command
+### 2. Deploy to Render
+
+1. Go to [Render](https://render.com/) and sign up/login
+2. Click **New +** → **Web Service**
+3. Connect your GitHub repository (or upload code)
+4. Configure the service:
+   - **Name**: `mushroom-chamber` (or any name)
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Plan**: Choose **Free**
+
+5. Add Environment Variables:
+   - Click **Advanced** → **Add Environment Variable**
+   - Add these variables:
+     ```
+     MONGODB_URI = mongodb+srv://mushroomuser:yourpassword@cluster.xxxxx.mongodb.net/mushroom_chamber?retryWrites=true&w=majority
+     PORT = 3000
+     NODE_ENV = production
+     ```
+   - Replace the `MONGODB_URI` with your actual MongoDB connection string
+
+6. Click **Create Web Service**
+7. Wait for deployment (5-10 minutes)
+8. Your backend URL will be: `https://mushroom-chamber.onrender.com` (or whatever name you chose)
+
+### 3. Update ESP32 Code
+
+In your Arduino code (`mushroom_sensor_esp32.ino`), update the backend URL:
+
+```cpp
+const char* cloudBackendUrl = "https://YOUR-RENDER-APP-NAME.onrender.com/api/sensors";
+```
+
+Replace `YOUR-RENDER-APP-NAME` with your actual Render app name.
+
+### 4. Update Flutter App (Already Done!)
+
+Your Flutter app is already configured to use:
+```dart
+static const String defaultBaseUrl = 'https://mushroom-chamber.onrender.com';
+```
+
+If you used a different name in Render, update this in:
+`mushroom/lib/services/sensor_service.dart`
 
 ## Local Development
 
-1. Install dependencies:
+### Install Dependencies
 ```bash
+cd backend
 npm install
 ```
 
-2. Create `.env` file (copy from `.env.example`):
+### Create .env File
 ```bash
 cp .env.example .env
 ```
 
-3. Update `.env` with your MongoDB URI
+Edit `.env` and add your MongoDB connection string:
+```
+MONGODB_URI=mongodb+srv://your-connection-string-here
+PORT=3000
+NODE_ENV=development
+```
 
-4. Run the server:
+### Run Development Server
 ```bash
 npm run dev
 ```
 
-Server will start on http://localhost:8080
+Server will run at `http://localhost:3000`
 
-## Deployment to Render
+### Run Production Server
+```bash
+npm start
+```
 
-### Option 1: Using Render Dashboard
+## API Endpoints
 
-1. Go to [render.com](https://render.com) and sign up/login
-2. Click "New" → "Web Service"
-3. Connect your GitHub repository
-4. Configure:
-   - **Name**: mushroom-monitoring-api
-   - **Environment**: Node
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Plan**: Free
+### Sensor Endpoints
+- `POST /api/sensors` - Create new sensor reading (ESP32 → Cloud)
+- `GET /api/sensors/latest` - Get latest sensor reading (Flutter App)
+- `GET /api/sensors` - Get sensor history with filters
+- `GET /api/sensors/statistics` - Get sensor statistics
+- `DELETE /api/sensors/old` - Clean old readings
 
-5. Add Environment Variables:
-   - `MONGODB_URI` - Your MongoDB connection string
-   - `NODE_ENV` - production
+### Actuator Endpoints
+- `POST /api/actuators` - Control actuator
+- `GET /api/actuators/states` - Get current states
+- `GET /api/actuators/history` - Get actuator history
 
-6. Click "Create Web Service"
+### System Endpoints
+- `GET /api/system/status` - System status
+- `GET /api/system/dashboard` - Dashboard data
+- `POST /api/system/calibrate` - Sensor calibration
 
-### Option 2: Using render.yaml (Infrastructure as Code)
+### Health Check
+- `GET /health` - Check server health
 
-The `render.yaml` file is already configured. Just:
-1. Push to GitHub
-2. Connect repository in Render
-3. Render will auto-detect the configuration
+## Testing the Backend
 
-## Environment Variables
+### Test with cURL (after deployment)
+```bash
+# Get latest sensor reading
+curl https://YOUR-APP.onrender.com/api/sensors/latest
 
-Required:
-- `MONGODB_URI` - MongoDB connection string
-- `PORT` - Server port (default: 8080, auto-set by Render)
+# Check health
+curl https://YOUR-APP.onrender.com/health
 
-Optional:
-- `NODE_ENV` - Environment (development/production)
+# Post sensor data (test)
+curl -X POST https://YOUR-APP.onrender.com/api/sensors \
+  -H "Content-Type: application/json" \
+  -d '{
+    "temperature": 25.5,
+    "humidity": 85.0,
+    "soilMoisture": 65.0,
+    "co2Level": 450,
+    "lightIntensity": 250
+  }'
+```
 
-## ESP32 Integration
+## Monitoring
 
-ESP32 should:
-1. POST sensor data to `/api/sensors`
-2. Poll `/api/actuators/pending` for commands
-3. Update command status via PUT `/api/actuators/:id/status`
-4. Connect to WebSocket for real-time commands (optional)
+### Render Dashboard
+- View logs in Render dashboard
+- Monitor service health
+- Check resource usage
 
-## Security
+### MongoDB Atlas
+- View data in Collections
+- Monitor database metrics
+- Set up alerts
 
-- Helmet.js for HTTP headers security
-- CORS enabled for mobile app
-- Rate limiting recommended for production
-- Environment variables for sensitive data
+## Important Notes
+
+⚠️ **Free Tier Limitations:**
+- Render free tier: Service sleeps after 15 minutes of inactivity (first request may be slow)
+- MongoDB Atlas free tier: 512MB storage (plenty for sensor data)
+- First ESP32 upload after sleep may timeout - that's normal, next one will work
+
+🔧 **Production Tips:**
+- Enable MongoDB indexes for better performance (already configured)
+- Set up data retention (auto-delete old readings)
+- Monitor Render logs for errors
+- Consider upgrading to paid tier for 24/7 uptime
+
+🔒 **Security:**
+- Never commit `.env` file to Git
+- Use strong MongoDB passwords
+- Enable network restrictions in MongoDB Atlas for production
+
+## Troubleshooting
+
+### ESP32 Can't Upload Data
+1. Check WiFi connection
+2. Verify backend URL in Arduino code
+3. Check Render service is running (not sleeping)
+4. View Serial Monitor for error messages
+
+### Flutter App Shows No Data
+1. Check backend URL in `sensor_service.dart`
+2. Verify backend is deployed and running
+3. Test backend endpoints with cURL
+4. Check MongoDB has data
+
+### MongoDB Connection Failed
+1. Verify connection string in Render environment variables
+2. Check database user credentials
+3. Confirm network access allows `0.0.0.0/0`
+4. Check MongoDB Atlas cluster is running
+
+## Data Flow
+
+```
+ESP32 Sensors → WiFi → Cloud Backend (Render) → MongoDB Atlas
+                             ↓
+                      Flutter App (reads data)
+```
 
 ## License
 
-ISC
+MIT
+
+## Support
+
+For issues or questions, create an issue in the GitHub repository.

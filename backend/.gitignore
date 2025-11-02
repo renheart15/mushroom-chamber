@@ -20,6 +20,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Build
-dist/
-build/
+# Testing
+coverage/
+.nyc_output/

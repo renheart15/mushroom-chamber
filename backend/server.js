@@ -1,150 +1,141 @@
-require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
-const http = require('http');
+const rateLimit = require('express-rate-limit');
 const WebSocket = require('ws');
+require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('dev'));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api/', limiter);
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://ralfanta0112_db_user:mushroom123@cluster0.3pbqkyk.mongodb.net/mushroom_monitoring?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mushroom_chamber';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✓ Connected to MongoDB Atlas'))
-  .catch((err) => console.error('✗ MongoDB connection error:', err));
+.then(() => {
+  console.log('✅ Connected to MongoDB');
+})
+.catch((err) => {
+  console.error('❌ MongoDB connection error:', err);
+  process.exit(1);
+});
 
-// Import Routes
-const sensorRoutes = require('./routes/sensors');
-const actuatorRoutes = require('./routes/actuators');
-const systemRoutes = require('./routes/system');
+// Import routes
+const sensorRoutes = require('./src/routes/sensorRoutes');
+const actuatorRoutes = require('./src/routes/actuatorRoutes');
+const systemRoutes = require('./src/routes/systemRoutes');
 
-// API Routes
+// Use routes
 app.use('/api/sensors', sensorRoutes);
 app.use('/api/actuators', actuatorRoutes);
 app.use('/api/system', systemRoutes);
 
-// Health Check
-app.get('/api/health', (req, res) => {
+// Health check endpoint
+app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    message: 'Mushroom Monitoring API is running',
     timestamp: new Date().toISOString(),
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'Mushroom Cultivation Monitoring API',
+    message: 'Mushroom Chamber API',
     version: '1.0.0',
     endpoints: {
-      health: '/api/health',
       sensors: '/api/sensors',
       actuators: '/api/actuators',
       system: '/api/system',
-      websocket: 'ws://[host]/ws'
+      health: '/health'
     }
   });
 });
 
-// WebSocket Connection Handler
-const clients = new Set();
-
-wss.on('connection', (ws, req) => {
-  console.log('✓ New WebSocket client connected');
-  clients.add(ws);
-
-  // Send welcome message
-  ws.send(JSON.stringify({
-    type: 'connection',
-    message: 'Connected to Mushroom Monitoring System',
-    timestamp: new Date().toISOString()
-  }));
-
-  // Handle incoming messages from clients
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log('Received:', data);
-
-      // Echo back or handle specific commands
-      if (data.type === 'ping') {
-        ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
-      }
-    } catch (error) {
-      console.error('WebSocket message error:', error);
-    }
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal server error'
   });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found'
+  });
+});
+
+// Start HTTP server
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// WebSocket Server for real-time updates
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws) => {
+  console.log('🔌 WebSocket client connected');
 
   ws.on('close', () => {
-    console.log('✗ WebSocket client disconnected');
-    clients.delete(ws);
+    console.log('🔌 WebSocket client disconnected');
   });
 
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
-    clients.delete(ws);
   });
+
+  // Send connection confirmation
+  ws.send(JSON.stringify({
+    type: 'connection',
+    message: 'Connected to Mushroom Chamber WebSocket',
+    timestamp: new Date().toISOString()
+  }));
 });
 
-// Broadcast function for sending data to all connected clients
-function broadcast(data) {
-  const message = JSON.stringify(data);
-  clients.forEach((client) => {
+// Broadcast function for sensor updates
+global.broadcastSensorUpdate = (sensorData) => {
+  wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      client.send(JSON.stringify({
+        type: 'sensor_update',
+        data: sensorData,
+        timestamp: new Date().toISOString()
+      }));
     }
   });
-}
-
-// Export broadcast function for use in routes
-app.set('broadcast', broadcast);
-
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-});
-
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
-
-// Start Server
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║  🍄 Mushroom Monitoring API Server                        ║
-║  Port: ${PORT}                                            ║
-║  Environment: ${process.env.NODE_ENV || 'development'}                              ║
-║  WebSocket: ws://localhost:${PORT}                         ║
-╚═══════════════════════════════════════════════════════════╝
-  `);
-});
+};
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+  console.log('SIGTERM signal received: closing HTTP server');
   server.close(() => {
-    mongoose.connection.close();
-    process.exit(0);
+    console.log('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
   });
 });
+
+module.exports = app;
