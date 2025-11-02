@@ -9,8 +9,8 @@ class ApiConfig {
 
   // WebSocket URL
   // After deployment, update this to your Render WebSocket URL:
-  // Example: 'wss://your-app-name.onrender.com'
-  static const String wsUrl = 'wss://mushroom-chamber.onrender.com';
+  // Example: 'wss://your-app-name.onrender.com/ws'
+  static const String wsUrl = 'wss://mushroom-chamber.onrender.com/ws';
 
   // API Endpoints
   static const String sensorsEndpoint = '/api/sensors';
