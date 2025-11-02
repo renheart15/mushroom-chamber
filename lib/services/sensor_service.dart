@@ -120,7 +120,7 @@ class SensorService {
 
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(Duration(seconds: 5), () {
+    _reconnectTimer = Timer(Duration(seconds: 3), () {
       if (!_isConnected) {
         print('Attempting to reconnect to sensors...');
         connect();

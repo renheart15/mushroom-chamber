@@ -6,7 +6,9 @@
       "Bash(.gradlew:*)",
       "Bash(./gradlew:*)",
       "Bash(dir:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)"
     ],
     "deny": [],
     "ask": []

@@ -183,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _startDataCollection() {
-    _timer = Timer.periodic(Duration(minutes: 5), (timer) async {
+    _timer = Timer.periodic(Duration(seconds: 5), (timer) async {
       if (_useRealSensors) {
         final reading = await _sensorService.getSensorReading();
         SensorData newData;
