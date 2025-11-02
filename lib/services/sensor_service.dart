@@ -57,9 +57,9 @@ class SensorReading {
 }
 
 class SensorService {
-  // Update this URL after deploying to Render
-  static const String defaultBaseUrl = 'http://localhost:8080';
-  static const String defaultWebSocketUrl = 'ws://localhost:8080';
+  // Cloud backend URL - deployed on Render
+  static const String defaultBaseUrl = 'https://mushroom-chamber.onrender.com';
+  static const String defaultWebSocketUrl = 'wss://mushroom-chamber.onrender.com';
 
   String baseUrl;
   String webSocketUrl;

@@ -5,12 +5,12 @@ class ApiConfig {
   // Backend API URL
   // After deployment, update this to your Render URL:
   // Example: 'https://your-app-name.onrender.com'
-  static const String baseUrl = 'http://localhost:8080';
+  static const String baseUrl = 'https://mushroom-chamber.onrender.com';
 
   // WebSocket URL
   // After deployment, update this to your Render WebSocket URL:
   // Example: 'wss://your-app-name.onrender.com'
-  static const String wsUrl = 'ws://localhost:8080';
+  static const String wsUrl = 'wss://mushroom-chamber.onrender.com';
 
   // API Endpoints
   static const String sensorsEndpoint = '/api/sensors';

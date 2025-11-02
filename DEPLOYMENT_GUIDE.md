@@ -44,7 +44,7 @@ git push -u origin main
 2. Click **"New"** → **"Web Service"**
 3. Connect your GitHub account and select your repository
 4. Configure the service:
-   - **Name**: `mushroom-monitoring-api` (or your preferred name)
+   - **Name**: `mushroom-chamber` (or your preferred name)
    - **Environment**: `Node`
    - **Region**: Choose closest to your location
    - **Branch**: `main`
@@ -62,7 +62,7 @@ git push -u origin main
 
 7. Wait for deployment (5-10 minutes). You'll see build logs.
 
-8. Once deployed, you'll get a URL like: `https://mushroom-monitoring-api.onrender.com`
+8. Once deployed, you'll get a URL like: `https://mushroom-chamber.onrender.com`
 
 #### Option B: Using render.yaml (Infrastructure as Code)
 
@@ -79,13 +79,13 @@ Test the API endpoints:
 
 ```bash
 # Health check
-curl https://your-app-name.onrender.com/api/health
+curl https://mushroom-chamber.onrender.com/api/health
 
 # Get sensor data
-curl https://your-app-name.onrender.com/api/sensors/latest
+curl https://mushroom-chamber.onrender.com/api/sensors/latest
 
 # System status
-curl https://your-app-name.onrender.com/api/system/status
+curl https://mushroom-chamber.onrender.com/api/system/status
 ```
 
 You should receive JSON responses.
@@ -96,8 +96,8 @@ You should receive JSON responses.
 
 2. Update the URLs with your Render deployment URL:
 ```dart
-static const String baseUrl = 'https://your-app-name.onrender.com';
-static const String wsUrl = 'wss://your-app-name.onrender.com';
+static const String baseUrl = 'https://mushroom-chamber.onrender.com';
+static const String wsUrl = 'wss://mushroom-chamber.onrender.com';
 ```
 
 3. Save the file
@@ -223,7 +223,7 @@ Your ESP32 firmware needs to send data to the backend:
 
 ```cpp
 // Update your ESP32 code to use the Render URL
-const char* serverUrl = "https://your-app-name.onrender.com";
+const char* serverUrl = "https://mushroom-chamber.onrender.com";
 
 // POST sensor data
 void sendSensorData() {

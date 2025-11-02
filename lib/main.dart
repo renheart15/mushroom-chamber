@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'dart:math';
 import 'services/sensor_service.dart';
@@ -77,18 +76,6 @@ class ActuatorStatus {
   });
 }
 
-class HarvestRecord {
-  final DateTime date;
-  final double weight;
-  final int flushNumber;
-
-  HarvestRecord({
-    required this.date,
-    required this.weight,
-    required this.flushNumber,
-  });
-}
-
 class DashboardScreen extends StatefulWidget {
   @override
   _DashboardScreenState createState() => _DashboardScreenState();
@@ -100,7 +87,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<SensorData> _sensorHistory = [];
   SensorData? _currentData;
   ActuatorStatus _actuatorStatus = ActuatorStatus();
-  List<HarvestRecord> _harvestRecords = [];
   SensorService _sensorService = SensorService();
   StreamSubscription<SensorReading>? _sensorSubscription;
   bool _useRealSensors = true;
@@ -109,19 +95,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeHarvestData();
     _initializeSensorConnection();
     _startDataCollection();
-  }
-
-  void _initializeHarvestData() {
-    _harvestRecords = [
-      HarvestRecord(date: DateTime.now().subtract(Duration(days: 35)), weight: 45.2, flushNumber: 1),
-      HarvestRecord(date: DateTime.now().subtract(Duration(days: 28)), weight: 52.8, flushNumber: 2),
-      HarvestRecord(date: DateTime.now().subtract(Duration(days: 21)), weight: 38.5, flushNumber: 3),
-      HarvestRecord(date: DateTime.now().subtract(Duration(days: 14)), weight: 41.7, flushNumber: 4),
-      HarvestRecord(date: DateTime.now().subtract(Duration(days: 7)), weight: 35.9, flushNumber: 5),
-    ];
   }
 
   Future<void> _initializeSensorConnection() async {
@@ -256,19 +231,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _startDataSimulation() {
-    _timer = Timer.periodic(Duration(minutes: 5), (timer) {
-      setState(() {
-        _currentData = _generateSensorData();
-        _sensorHistory.add(_currentData!);
-        if (_sensorHistory.length > 50) {
-          _sensorHistory.removeAt(0);
-        }
-        _updateActuatorStatus();
-      });
-    });
-  }
-
   SensorData _generateSensorData() {
     final random = Random();
     return SensorData(
@@ -301,8 +263,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       setState(() {
+        // Both exhaust fans work together
         _actuatorStatus.exhaustFan1 = _currentData!.co2Level > 800;
-        _actuatorStatus.exhaustFan2 = _currentData!.co2Level > 1000; // Second fan for higher CO2
+        _actuatorStatus.exhaustFan2 = _currentData!.co2Level > 800;
         _actuatorStatus.mistMaker = _currentData!.humidity < 80;
         _actuatorStatus.waterPump = _currentData!.soilMoisture < 60;
         _actuatorStatus.ledGrowLight = _currentData!.lightIntensity < 200;
@@ -347,9 +310,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         index: _selectedIndex,
         children: [
           _buildDashboard(),
-          _buildSensorGraphs(),
+          _buildDataLogs(),
           _buildActuatorControl(),
-          _buildHarvestTracking(),
           _buildSettings(),
         ],
       ),
@@ -363,9 +325,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         items: [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.show_chart), label: 'Data Recorded'),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Data Logs'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_input_component), label: 'Control'),
-          BottomNavigationBarItem(icon: Icon(Icons.agriculture), label: 'Harvest'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
@@ -695,8 +656,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Expanded(
               child: _buildActionButton(
-                'View Charts',
-                Icons.trending_up,
+                'Data Logs',
+                Icons.history,
                 Colors.blue,
                 () => setState(() => _selectedIndex = 1),
               ),
@@ -717,19 +678,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Expanded(
               child: _buildActionButton(
-                'Harvest Log',
-                Icons.agriculture,
-                Colors.green,
-                () => setState(() => _selectedIndex = 3),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
                 'Settings',
                 Icons.settings,
                 Colors.purple,
-                () => setState(() => _selectedIndex = 4),
+                () => setState(() => _selectedIndex = 3),
               ),
             ),
           ],
@@ -766,7 +718,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSensorGraphs() {
+  Widget _buildDataLogs() {
     return SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.all(20.0),
@@ -775,10 +727,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.trending_up, color: Colors.blue, size: 28),
+                Icon(Icons.history, color: Colors.blue, size: 28),
                 SizedBox(width: 12),
                 Text(
-                  'Data Recorded',
+                  'Data Logs',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -789,314 +741,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'Sensor and device status history (5-minute intervals)',
+              'Historical sensor readings (last ${_sensorHistory.length} records)',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[600],
               ),
             ),
             SizedBox(height: 24),
-            _buildCurrentSensorReadingsCard(),
-            SizedBox(height: 20),
-            _buildActiveDevicesCard(),
-            SizedBox(height: 20),
-            _buildMobileGraph(
-              'Temperature',
-              '°C',
-              Colors.red,
-              Icons.thermostat_outlined,
-              (data) => data.temperature,
-              '22-30°C optimal',
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Data is logged every 5 minutes. Maximum ${_sensorHistory.length} recent entries.',
+                      style: TextStyle(
+                        color: Colors.blue.shade700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             SizedBox(height: 20),
-            _buildMobileGraph(
-              'Humidity',
-              '%',
-              Colors.blue,
-              Icons.water_drop_outlined,
-              (data) => data.humidity,
-              '80-90% target range',
-            ),
-            SizedBox(height: 20),
-            _buildMobileGraph(
-              'CO₂ Level',
-              'ppm',
-              Colors.orange,
-              Icons.air_outlined,
-              (data) => data.co2Level,
-              'Keep below 800 ppm',
-            ),
-            SizedBox(height: 20),
-            _buildMobileGraph(
-              'Light Intensity',
-              'lux',
-              Colors.amber,
-              Icons.light_mode_outlined,
-              (data) => data.lightIntensity,
-              '200-300 lux ideal',
-            ),
-            SizedBox(height: 20),
-            _buildActuatorStatusGraph(),
+            if (_sensorHistory.isEmpty)
+              Center(
+                child: Container(
+                  padding: EdgeInsets.all(40),
+                  child: Column(
+                    children: [
+                      Icon(Icons.hourglass_empty, size: 64, color: Colors.grey[400]),
+                      SizedBox(height: 16),
+                      Text(
+                        'No data logged yet',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Sensor data will appear here once collected',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...(_sensorHistory.reversed.map((data) => _buildDataLogCard(data)).toList()),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCurrentSensorReadingsCard() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.sensors, size: 24, color: Colors.blue),
-              ),
-              SizedBox(width: 16),
-              Text(
-                'Current Sensor Readings',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              Spacer(),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _isConnectedToSensors ? Colors.green : Colors.grey,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Temperature',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${_currentData?.temperature.toStringAsFixed(1) ?? '--'}°C',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Optimal: 22-30°C',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Humidity',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${_currentData?.humidity.toStringAsFixed(1) ?? '--'}%',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Target: 80-90%',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Soil Moisture',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${_currentData?.soilMoisture.toStringAsFixed(1) ?? '--'}%',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Range: 60-70%',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'CO₂ Level',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${_currentData?.co2Level.toStringAsFixed(0) ?? '--'} ppm',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Keep < 800 ppm',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Light Intensity',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '${_currentData?.lightIntensity.toStringAsFixed(0) ?? '--'} lux',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              Text(
-                '200-300 lux',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Text(
-                'Recorded at:',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(width: 8),
-              Text(
-                _currentData != null
-                    ? '${_currentData!.timestamp.day}/${_currentData!.timestamp.month}/${_currentData!.timestamp.year} ${_currentData!.timestamp.hour}:${_currentData!.timestamp.minute.toString().padLeft(2, '0')}'
-                    : '--/--/---- --:--',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveDevicesCard() {
+  Widget _buildDataLogCard(SensorData data) {
     List<String> activeDevices = [];
-    if (_currentData?.actuatorStatus.exhaustFan1 ?? false) activeDevices.add('Exhaust Fan 1');
-    if (_currentData?.actuatorStatus.exhaustFan2 ?? false) activeDevices.add('Exhaust Fan 2');
-    if (_currentData?.actuatorStatus.mistMaker ?? false) activeDevices.add('Mist Maker');
-    if (_currentData?.actuatorStatus.waterPump ?? false) activeDevices.add('Water Pump');
-    if (_currentData?.actuatorStatus.ledGrowLight ?? false) activeDevices.add('LED Grow Light');
-    if (_currentData?.actuatorStatus.peltierWithFan ?? false) activeDevices.add('Peltier Cooling System');
+    if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan 1');
+    if (data.actuatorStatus.exhaustFan2) activeDevices.add('Fan 2');
+    if (data.actuatorStatus.mistMaker) activeDevices.add('Mist');
+    if (data.actuatorStatus.waterPump) activeDevices.add('Pump');
+    if (data.actuatorStatus.ledGrowLight) activeDevices.add('Light');
+    if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cooling');
 
     return Container(
-      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1109,408 +831,203 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.access_time, size: 20, color: Colors.blue),
                 ),
-                child: Icon(Icons.settings_outlined, size: 24, color: Colors.purple),
-              ),
-              SizedBox(width: 16),
-              Text(
-                'Active Devices',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${data.timestamp.day}/${data.timestamp.month}/${data.timestamp.year}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      Text(
+                        '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Spacer(),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: activeDevices.isNotEmpty ? Colors.green : Colors.grey,
-                  shape: BoxShape.circle,
+                if (activeDevices.isNotEmpty)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${activeDevices.length} active',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Divider(height: 1, color: Colors.grey[200]),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildLogDataItem(
+                    Icons.thermostat_outlined,
+                    'Temp',
+                    '${data.temperature.toStringAsFixed(1)}°C',
+                    _getTemperatureColorForValue(data.temperature),
+                  ),
                 ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: _buildLogDataItem(
+                    Icons.water_drop_outlined,
+                    'Humidity',
+                    '${data.humidity.toStringAsFixed(1)}%',
+                    _getHumidityColorForValue(data.humidity),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: _buildLogDataItem(
+                    Icons.grass_outlined,
+                    'Soil',
+                    '${data.soilMoisture.toStringAsFixed(1)}%',
+                    _getMoistureColorForValue(data.soilMoisture),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildLogDataItem(
+                    Icons.air_outlined,
+                    'CO₂',
+                    '${data.co2Level.toStringAsFixed(0)} ppm',
+                    _getCO2ColorForValue(data.co2Level),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: _buildLogDataItem(
+                    Icons.light_mode_outlined,
+                    'Light',
+                    '${data.lightIntensity.toStringAsFixed(0)} lux',
+                    _getLightColorForValue(data.lightIntensity),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(child: Container()),
+              ],
+            ),
+            if (activeDevices.isNotEmpty) ...[
+              SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: activeDevices.map((device) {
+                  return Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      device,
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ],
-          ),
-          SizedBox(height: 12),
-          Text(
-            activeDevices.isEmpty
-                ? 'No devices currently active'
-                : 'Active: ${activeDevices.join(', ')}',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[800],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMobileGraph(String title, String unit, Color color, IconData icon, double Function(SensorData) getValue, String subtitle) {
-    double currentValue = _currentData != null ? getValue(_currentData!) : 0;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    '${currentValue.toStringAsFixed(1)} $unit',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Container(
-              height: 180,
-              child: _sensorHistory.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Collecting data...',
-                        style: TextStyle(color: Colors.grey[500]),
-                      ),
-                    )
-                  : LineChart(
-                      LineChartData(
-                        gridData: FlGridData(
-                          show: true,
-                          drawHorizontalLine: true,
-                          drawVerticalLine: false,
-                          getDrawingHorizontalLine: (value) => FlLine(
-                            color: Colors.grey.withOpacity(0.2),
-                            strokeWidth: 1,
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          show: true,
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                if (_sensorHistory.isEmpty) return Text('');
-                                final index = value.toInt();
-                                if (index < 0 || index >= _sensorHistory.length) return Text('');
-                                final time = _sensorHistory[index].timestamp;
-                                return SideTitleWidget(
-                                  axisSide: meta.axisSide,
-                                  child: Text(
-                                    '${time.hour}:${time.minute.toString().padLeft(2, '0')}',
-                                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                  ),
-                                );
-                              },
-                              reservedSize: 32,
-                              interval: 5,
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  value.toStringAsFixed(0),
-                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                );
-                              },
-                            ),
-                          ),
-                          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineTouchData: LineTouchData(
-                          enabled: true,
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipColor: (touchedSpot) => color,
-                            tooltipRoundedRadius: 8,
-                            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                              return touchedBarSpots.map((barSpot) {
-                                final index = barSpot.x.toInt();
-                                if (index < 0 || index >= _sensorHistory.length) return null;
-                                final time = _sensorHistory[index].timestamp;
-                                return LineTooltipItem(
-                                  '${barSpot.y.toStringAsFixed(1)} $unit\n${time.hour}:${time.minute.toString().padLeft(2, '0')}',
-                                  TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                );
-                              }).toList();
-                            },
-                          ),
-                        ),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _sensorHistory.asMap().entries.map((entry) {
-                              return FlSpot(entry.key.toDouble(), getValue(entry.value));
-                            }).toList(),
-                            isCurved: true,
-                            color: color,
-                            barWidth: 3,
-                            dotData: FlDotData(show: false),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: color.withOpacity(0.1),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildActuatorStatusGraph() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 10,
-            offset: Offset(0, 4),
+  Widget _buildLogDataItem(IconData icon, String label, String value, Color color) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
           ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.settings_outlined, color: Colors.purple, size: 24),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Device Status',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
-                        'Actuator activity over time',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Container(
-              height: 180,
-              child: _sensorHistory.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Collecting data...',
-                        style: TextStyle(color: Colors.grey[500]),
-                      ),
-                    )
-                  : LineChart(
-                      LineChartData(
-                        gridData: FlGridData(
-                          show: true,
-                          drawHorizontalLine: true,
-                          drawVerticalLine: false,
-                          getDrawingHorizontalLine: (value) => FlLine(
-                            color: Colors.grey.withOpacity(0.2),
-                            strokeWidth: 1,
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          show: true,
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                if (_sensorHistory.isEmpty) return Text('');
-                                final index = value.toInt();
-                                if (index < 0 || index >= _sensorHistory.length) return Text('');
-                                final time = _sensorHistory[index].timestamp;
-                                return SideTitleWidget(
-                                  axisSide: meta.axisSide,
-                                  child: Text(
-                                    '${time.hour}:${time.minute.toString().padLeft(2, '0')}',
-                                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                  ),
-                                );
-                              },
-                              reservedSize: 32,
-                              interval: 5,
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  value == 1 ? 'ON' : 'OFF',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                );
-                              },
-                              interval: 1,
-                            ),
-                          ),
-                          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineTouchData: LineTouchData(
-                          enabled: true,
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipColor: (touchedSpot) => Colors.purple,
-                            tooltipRoundedRadius: 8,
-                            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                              return touchedBarSpots.map((barSpot) {
-                                final index = barSpot.x.toInt();
-                                if (index < 0 || index >= _sensorHistory.length) return null;
-                                final time = _sensorHistory[index].timestamp;
-                                final status = _sensorHistory[index].actuatorStatus;
-                                List<String> activeDevices = [];
-                                if (status.exhaustFan1) activeDevices.add('Exhaust Fan 1');
-                                if (status.exhaustFan2) activeDevices.add('Exhaust Fan 2');
-                                if (status.mistMaker) activeDevices.add('Mist Maker');
-                                if (status.waterPump) activeDevices.add('Water Pump');
-                                if (status.ledGrowLight) activeDevices.add('LED Grow Light');
-                                if (status.peltierWithFan) activeDevices.add('Cooling');
-                                final tooltipText = activeDevices.isEmpty
-                                    ? 'No devices active'
-                                    : 'Active: ${activeDevices.join(', ')}';
-                                return LineTooltipItem(
-                                  '$tooltipText\n${time.hour}:${time.minute.toString().padLeft(2, '0')}',
-                                  TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                );
-                              }).toList();
-                            },
-                          ),
-                        ),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _sensorHistory.asMap().entries.map((entry) {
-                              final status = entry.value.actuatorStatus;
-                              final activeCount = [
-                                status.exhaustFan1,
-                                status.exhaustFan2,
-                                status.mistMaker,
-                                status.waterPump,
-                                status.ledGrowLight,
-                                status.peltierWithFan,
-                              ].where((s) => s).length;
-                              return FlSpot(entry.key.toDouble(), activeCount.toDouble());
-                            }).toList(),
-                            isCurved: false,
-                            color: Colors.purple,
-                            barWidth: 3,
-                            dotData: FlDotData(show: true),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: Colors.purple.withOpacity(0.1),
-                            ),
-                          ),
-                        ],
-                        minY: 0,
-                        maxY: 6,
-                      ),
-                    ),
-            ),
-          ],
         ),
-      ),
+        SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
     );
+  }
+
+  Color _getTemperatureColorForValue(double temp) {
+    if (temp < 22 || temp > 30) return Colors.red;
+    if (temp < 24 || temp > 28) return Colors.orange;
+    return Colors.green;
+  }
+
+  Color _getHumidityColorForValue(double humidity) {
+    if (humidity < 80 || humidity > 90) return Colors.red;
+    if (humidity < 82 || humidity > 88) return Colors.orange;
+    return Colors.green;
+  }
+
+  Color _getMoistureColorForValue(double moisture) {
+    if (moisture < 60 || moisture > 70) return Colors.red;
+    if (moisture < 62 || moisture > 68) return Colors.orange;
+    return Colors.green;
+  }
+
+  Color _getCO2ColorForValue(double co2) {
+    if (co2 > 800) return Colors.red;
+    if (co2 > 600) return Colors.orange;
+    return Colors.green;
+  }
+
+  Color _getLightColorForValue(double light) {
+    if (light < 200 || light > 300) return Colors.red;
+    if (light < 220 || light > 280) return Colors.orange;
+    return Colors.green;
   }
 
   Widget _buildActuatorControl() {
@@ -1707,287 +1224,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHarvestTracking() {
-    double totalYield = _harvestRecords.fold(0, (sum, record) => sum + record.weight);
-    double avgYield = _harvestRecords.isNotEmpty ? totalYield / _harvestRecords.length : 0;
-    int totalFlushes = _harvestRecords.length;
-    double bestHarvest = _harvestRecords.isNotEmpty ? _harvestRecords.map((r) => r.weight).reduce((a, b) => a > b ? a : b) : 0;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.agriculture, color: Colors.green, size: 28),
-                SizedBox(width: 12),
-                Text(
-                  'Harvest Log',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Track your mushroom yields',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 24),
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.green.shade400, Colors.green.shade600],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildHarvestStatCard(
-                          'Total Yield',
-                          '${totalYield.toStringAsFixed(1)} g',
-                          Icons.scale,
-                          Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: _buildHarvestStatCard(
-                          'Avg/Flush',
-                          '${avgYield.toStringAsFixed(1)} g',
-                          Icons.timeline,
-                          Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildHarvestStatCard(
-                          'Best Harvest',
-                          '${bestHarvest.toStringAsFixed(1)} g',
-                          Icons.star,
-                          Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: _buildHarvestStatCard(
-                          'Total Flushes',
-                          '$totalFlushes',
-                          Icons.format_list_numbered,
-                          Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  'Recent Harvests',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                Spacer(),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '$totalFlushes flushes',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            ...(_harvestRecords.map((record) => _buildMobileHarvestCard(record)).toList()),
-            SizedBox(height: 20),
-            _buildAddHarvestButton(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHarvestStatCard(String title, String value, IconData icon, Color textColor) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: textColor, size: 24),
-          SizedBox(height: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              color: textColor.withOpacity(0.8),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMobileHarvestCard(HarvestRecord record) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  '${record.flushNumber}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Flush ${record.flushNumber}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '${record.date.day}/${record.date.month}/${record.date.year}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${record.weight.toStringAsFixed(1)} g',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddHarvestButton() {
-    return Container(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: () {
-          // Add harvest functionality would go here
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, size: 24),
-            SizedBox(width: 8),
-            Text(
-              'Add New Harvest',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ],
@@ -2307,33 +1543,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Real sensor hardware only',
+                    'Cloud backend (Render)',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey[600],
                     ),
                   ),
                 ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                _showSensorConfigDialog();
-              },
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'Configure',
-                  style: TextStyle(
-                    color: Colors.purple,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                  ),
-                ),
               ),
             ),
           ],
@@ -2461,181 +1677,5 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return Colors.orange;
     }
     return Colors.green;
-  }
-
-    void _showSensorConfigDialog() {
-    TextEditingController urlController = TextEditingController(text: _sensorService.baseUrl);
-    TextEditingController wsController = TextEditingController(text: _sensorService.webSocketUrl);
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Sensor Configuration'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Real sensor mode only - no simulation. Shows zero values when disconnected.',
-                          style: TextStyle(color: Colors.blue.shade700),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: urlController,
-                  decoration: InputDecoration(
-                    labelText: 'HTTP API URL',
-                    hintText: 'http://192.168.137.60:8080',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: wsController,
-                  decoration: InputDecoration(
-                    labelText: 'WebSocket URL',
-                    hintText: 'ws://192.168.137.60:8080/ws',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: Text('Test Connection'),
-              onPressed: () async {
-                final newUrl = urlController.text.trim();
-                final newWsUrl = wsController.text.trim();
-
-                if (newUrl.isNotEmpty && newWsUrl.isNotEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Testing connection...'),
-                      backgroundColor: Colors.orange,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-
-                  final originalUrl = _sensorService.baseUrl;
-                  final originalWsUrl = _sensorService.webSocketUrl;
-                  _sensorService.updateEndpoints(newUrl, newWsUrl);
-
-                  final testReading = await _sensorService.getSensorReading();
-                  if (testReading != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Connection successful!'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    setState(() {
-                      _isConnectedToSensors = true;
-                      _useRealSensors = true;
-                    });
-                    Navigator.of(context).pop();
-                    _sensorSubscription?.cancel();
-                    await _initializeSensorConnection();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Connection failed. Reverting to previous settings.'),
-                        backgroundColor: Colors.red,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                    _sensorService.updateEndpoints(originalUrl, originalWsUrl);
-                    setState(() {
-                      _isConnectedToSensors = false;
-                    });
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Please enter valid URLs.'),
-                      backgroundColor: Colors.red,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-            ),
-            ElevatedButton(
-              child: Text('Save'),
-              onPressed: () async {
-                final newUrl = urlController.text.trim();
-                final newWsUrl = wsController.text.trim();
-
-                if (newUrl.isNotEmpty && newWsUrl.isNotEmpty) {
-                  final originalUrl = _sensorService.baseUrl;
-                  final originalWsUrl = _sensorService.webSocketUrl;
-                  _sensorService.updateEndpoints(newUrl, newWsUrl);
-
-                  final testReading = await _sensorService.getSensorReading();
-                  if (testReading != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Configuration saved successfully!'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    setState(() {
-                      _isConnectedToSensors = true;
-                      _useRealSensors = true;
-                    });
-                    Navigator.of(context).pop();
-                    _sensorSubscription?.cancel();
-                    await _initializeSensorConnection();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Connection failed. Please test connection first.'),
-                        backgroundColor: Colors.red,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                    _sensorService.updateEndpoints(originalUrl, originalWsUrl);
-                    setState(() {
-                      _isConnectedToSensors = false;
-                    });
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Please enter valid URLs.'),
-                      backgroundColor: Colors.red,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
   }
 }
