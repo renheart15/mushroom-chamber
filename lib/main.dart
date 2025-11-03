@@ -138,6 +138,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  bool _isValidSensorData(SensorData data) {
+    // Check if all sensor values are 0 or null - if so, don't save to logs
+    return data.temperature != 0.0 ||
+           data.humidity != 0.0 ||
+           data.soilMoisture != 0.0 ||
+           data.co2Level != 0.0 ||
+           data.lightIntensity != 0.0;
+  }
+
   Future<void> _initializeSensorConnection() async {
     print('Attempting to connect to ESP32 sensors at ${_sensorService.baseUrl}');
     final testReading = await _sensorService.getSensorReading();
@@ -165,7 +174,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   peltierWithFan: _actuatorStatus.peltierWithFan,
                 ),
               );
-              _sensorHistory.add(_currentData!);
+              // Only add to history if sensor data is valid (not all zeros)
+              if (_isValidSensorData(_currentData!)) {
+                _sensorHistory.add(_currentData!);
+              }
               _updateActuatorStatus();
               _isConnectedToSensors = true;
             });
@@ -257,7 +269,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         setState(() {
           _currentData = newData;
-          _sensorHistory.add(_currentData!);
+          // Only add to history if sensor data is valid (not all zeros)
+          if (_isValidSensorData(newData)) {
+            _sensorHistory.add(_currentData!);
+          }
           _updateActuatorStatus();
         });
       }
