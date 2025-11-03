@@ -9,6 +9,16 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Helper function to get current time in Singapore timezone (UTC+8)
+function getSingaporeTime() {
+  const now = new Date();
+  // Convert to Singapore time (UTC+8)
+  const singaporeOffset = 8 * 60; // 8 hours in minutes
+  const localOffset = now.getTimezoneOffset(); // Local offset in minutes
+  const singaporeTime = new Date(now.getTime() + (singaporeOffset + localOffset) * 60 * 1000);
+  return singaporeTime;
+}
+
 // Middleware
 app.use(helmet());
 app.use(cors());
@@ -106,7 +116,7 @@ wss.on('connection', (ws) => {
 
       // Check if this is sensor data from ESP32
       if (data.temperature !== undefined && data.humidity !== undefined) {
-        // Save to database with default values for missing fields
+        // Save to database with Singapore timezone timestamp
         const sensorReading = new SensorReading({
           temperature: data.temperature || 0,
           humidity: data.humidity || 0,
@@ -114,7 +124,7 @@ wss.on('connection', (ws) => {
           co2Level: data.co2Level || data.co2 || 0,
           lightIntensity: data.lightIntensity || data.light || 0,
           deviceId: data.deviceId || 'esp32-main',
-          timestamp: new Date()
+          timestamp: getSingaporeTime()
         });
 
         await sensorReading.save();

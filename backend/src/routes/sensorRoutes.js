@@ -2,13 +2,22 @@ const express = require('express');
 const router = express.Router();
 const SensorReading = require('../models/SensorReading');
 
+// Helper function to get current time in Singapore timezone (UTC+8)
+function getSingaporeTime() {
+  const now = new Date();
+  // Convert to Singapore time (UTC+8)
+  const singaporeOffset = 8 * 60; // 8 hours in minutes
+  const localOffset = now.getTimezoneOffset(); // Local offset in minutes
+  const singaporeTime = new Date(now.getTime() + (singaporeOffset + localOffset) * 60 * 1000);
+  return singaporeTime;
+}
+
 // POST /api/sensors - Create new sensor reading (from ESP32)
 router.post('/', async (req, res) => {
   try {
-    const { temperature, humidity, soilMoisture, co2Level, co2, lightIntensity, light, deviceId, timestamp } = req.body;
+    const { temperature, humidity, soilMoisture, co2Level, co2, lightIntensity, light, deviceId } = req.body;
 
-    // Create new sensor reading with default values for missing fields
-    // Use the timestamp from ESP32 (Singapore time) if provided, otherwise use server time
+    // Create new sensor reading with Singapore timezone timestamp
     const sensorReading = new SensorReading({
       temperature: temperature || 0,
       humidity: humidity || 0,
@@ -16,7 +25,7 @@ router.post('/', async (req, res) => {
       co2Level: co2Level || co2 || 0,
       lightIntensity: lightIntensity || light || 0,
       deviceId: deviceId || 'esp32-main',
-      timestamp: timestamp ? new Date(timestamp) : new Date()
+      timestamp: getSingaporeTime()
     });
 
     await sensorReading.save();
