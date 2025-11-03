@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File;
 import 'dart:convert';
 import 'services/sensor_service.dart';
 import 'package:csv/csv.dart';
@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   runApp(MushroomMonitoringApp());
@@ -488,18 +489,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0];
       final fileName = 'mushroom_sensor_data_$timestamp.csv';
 
-      // Web platform: Download file using browser
-      final bytes = utf8.encode(csv);
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.document.createElement('a') as html.AnchorElement
-        ..href = url
-        ..style.display = 'none'
-        ..download = fileName;
-      html.document.body?.children.add(anchor);
-      anchor.click();
-      html.document.body?.children.remove(anchor);
-      html.Url.revokeObjectUrl(url);
+      if (kIsWeb) {
+        // Web platform: Download file using browser
+        final bytes = utf8.encode(csv);
+        final blob = html.Blob([bytes]);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.document.createElement('a') as html.AnchorElement
+          ..href = url
+          ..style.display = 'none'
+          ..download = fileName;
+        html.document.body?.children.add(anchor);
+        anchor.click();
+        html.document.body?.children.remove(anchor);
+        html.Url.revokeObjectUrl(url);
+      } else {
+        // Mobile platform: Save and share file
+        final directory = await getApplicationDocumentsDirectory();
+        final path = '${directory.path}/$fileName';
+        final file = File(path);
+        await file.writeAsString(csv);
+
+        // Share the file
+        await Share.shareXFiles(
+          [XFile(path)],
+          subject: 'Mushroom Sensor Data',
+          text: 'Export of mushroom farm sensor data from $timestamp',
+        );
+      }
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -508,7 +524,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.white),
               SizedBox(width: 12),
-              Text('CSV downloaded successfully!'),
+              Text(kIsWeb ? 'CSV downloaded successfully!' : 'CSV exported successfully!'),
             ],
           ),
           backgroundColor: Colors.green,
@@ -625,11 +641,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-      // Show PDF preview and allow user to save/print
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'mushroom_sensor_data_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0]}.pdf',
-      );
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0];
+      final fileName = 'mushroom_sensor_data_$timestamp.pdf';
+
+      if (kIsWeb) {
+        // Web: Use print dialog
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdf.save(),
+          name: fileName,
+        );
+      } else {
+        // Mobile: Save and share PDF
+        final pdfBytes = await pdf.save();
+        final directory = await getApplicationDocumentsDirectory();
+        final path = '${directory.path}/$fileName';
+        final file = File(path);
+        await file.writeAsBytes(pdfBytes);
+
+        // Share the PDF
+        await Share.shareXFiles(
+          [XFile(path)],
+          subject: 'Mushroom Sensor Data PDF',
+          text: 'Export of mushroom farm sensor data from $timestamp',
+        );
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -637,7 +672,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.white),
               SizedBox(width: 12),
-              Text('PDF generated successfully'),
+              Text(kIsWeb ? 'PDF generated successfully' : 'PDF exported successfully'),
             ],
           ),
           backgroundColor: Colors.green,
