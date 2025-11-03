@@ -761,7 +761,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Data is logged every 5 minutes. Maximum ${_sensorHistory.length} recent entries.',
+                      'Data is logged every 5 seconds. Maximum 50 recent entries.',
                       style: TextStyle(
                         color: Colors.blue.shade700,
                         fontSize: 14,
@@ -801,204 +801,207 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )
             else
-              ...(_sensorHistory.reversed.map((data) => _buildDataLogCard(data)).toList()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDataLogCard(SensorData data) {
-    List<String> activeDevices = [];
-    if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan 1');
-    if (data.actuatorStatus.exhaustFan2) activeDevices.add('Fan 2');
-    if (data.actuatorStatus.mistMaker) activeDevices.add('Mist');
-    if (data.actuatorStatus.waterPump) activeDevices.add('Pump');
-    if (data.actuatorStatus.ledGrowLight) activeDevices.add('Light');
-    if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cooling');
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.access_time, size: 20, color: Colors.blue),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${data.timestamp.day}/${data.timestamp.month}/${data.timestamp.year}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
-                        '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 0,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
-                ),
-                if (activeDevices.isNotEmpty)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${activeDevices.length} active',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                  child: DataTable(
+                    headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                    columnSpacing: 20,
+                    horizontalMargin: 16,
+                    columns: [
+                      DataColumn(
+                        label: Text(
+                          'Time',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Divider(height: 1, color: Colors.grey[200]),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildLogDataItem(
-                    Icons.thermostat_outlined,
-                    'Temp',
-                    '${data.temperature.toStringAsFixed(1)}°C',
-                    _getTemperatureColorForValue(data.temperature),
-                  ),
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: _buildLogDataItem(
-                    Icons.water_drop_outlined,
-                    'Humidity',
-                    '${data.humidity.toStringAsFixed(1)}%',
-                    _getHumidityColorForValue(data.humidity),
-                  ),
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: _buildLogDataItem(
-                    Icons.grass_outlined,
-                    'Soil',
-                    '${data.soilMoisture.toStringAsFixed(1)}%',
-                    _getMoistureColorForValue(data.soilMoisture),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildLogDataItem(
-                    Icons.air_outlined,
-                    'CO₂',
-                    '${data.co2Level.toStringAsFixed(0)} ppm',
-                    _getCO2ColorForValue(data.co2Level),
-                  ),
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: _buildLogDataItem(
-                    Icons.light_mode_outlined,
-                    'Light',
-                    '${data.lightIntensity.toStringAsFixed(0)} lux',
-                    _getLightColorForValue(data.lightIntensity),
-                  ),
-                ),
-                SizedBox(width: 8),
-                Expanded(child: Container()),
-              ],
-            ),
-            if (activeDevices.isNotEmpty) ...[
-              SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: activeDevices.map((device) {
-                  return Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      device,
-                      style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                      DataColumn(
+                        label: Text(
+                          'Temp\n(°C)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                      DataColumn(
+                        label: Text(
+                          'Humidity\n(%)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Soil\n(%)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'CO₂\n(ppm)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Light\n(lux)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Active\nDevices',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                    rows: _sensorHistory.reversed.map((data) {
+                      int activeDevices = [
+                        data.actuatorStatus.exhaustFan1,
+                        data.actuatorStatus.exhaustFan2,
+                        data.actuatorStatus.mistMaker,
+                        data.actuatorStatus.waterPump,
+                        data.actuatorStatus.ledGrowLight,
+                        data.actuatorStatus.peltierWithFan,
+                      ].where((status) => status).length;
+
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getTemperatureColorForValue(data.temperature).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                data.temperature.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getTemperatureColorForValue(data.temperature),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getHumidityColorForValue(data.humidity).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                data.humidity.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getHumidityColorForValue(data.humidity),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getMoistureColorForValue(data.soilMoisture).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                data.soilMoisture.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getMoistureColorForValue(data.soilMoisture),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getCO2ColorForValue(data.co2Level).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                data.co2Level.toStringAsFixed(0),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getCO2ColorForValue(data.co2Level),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getLightColorForValue(data.lightIntensity).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                data.lightIntensity.toStringAsFixed(0),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getLightColorForValue(data.lightIntensity),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: activeDevices > 0 ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$activeDevices/6',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: activeDevices > 0 ? Colors.green : Colors.grey,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLogDataItem(IconData icon, String label, String value, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 20, color: color),
-        SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-          ),
-        ),
-        SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
 
   Color _getTemperatureColorForValue(double temp) {
     if (temp < 22 || temp > 30) return Colors.red;
