@@ -7,13 +7,13 @@ router.post('/', async (req, res) => {
   try {
     const { temperature, humidity, soilMoisture, co2Level, co2, lightIntensity, light, deviceId } = req.body;
 
-    // Create new sensor reading
+    // Create new sensor reading with default values for missing fields
     const sensorReading = new SensorReading({
-      temperature,
-      humidity,
-      soilMoisture,
-      co2Level: co2Level || co2,
-      lightIntensity: lightIntensity || light,
+      temperature: temperature || 0,
+      humidity: humidity || 0,
+      soilMoisture: soilMoisture || 0,
+      co2Level: co2Level || co2 || 0,
+      lightIntensity: lightIntensity || light || 0,
       deviceId: deviceId || 'esp32-main',
       timestamp: new Date()
     });

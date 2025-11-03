@@ -106,13 +106,13 @@ wss.on('connection', (ws) => {
 
       // Check if this is sensor data from ESP32
       if (data.temperature !== undefined && data.humidity !== undefined) {
-        // Save to database
+        // Save to database with default values for missing fields
         const sensorReading = new SensorReading({
-          temperature: data.temperature,
-          humidity: data.humidity,
-          soilMoisture: data.soilMoisture,
-          co2Level: data.co2Level || data.co2,
-          lightIntensity: data.lightIntensity || data.light,
+          temperature: data.temperature || 0,
+          humidity: data.humidity || 0,
+          soilMoisture: data.soilMoisture || 0,
+          co2Level: data.co2Level || data.co2 || 0,
+          lightIntensity: data.lightIntensity || data.light || 0,
           deviceId: data.deviceId || 'esp32-main',
           timestamp: new Date()
         });

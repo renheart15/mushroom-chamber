@@ -21,14 +21,16 @@ const sensorReadingSchema = new mongoose.Schema({
   },
   co2Level: {
     type: Number,
-    required: true,
+    required: false,
+    default: 0,
     alias: 'co2',
     min: 0,
     max: 10000
   },
   lightIntensity: {
     type: Number,
-    required: true,
+    required: false,
+    default: 0,
     alias: 'light',
     min: 0,
     max: 100000
