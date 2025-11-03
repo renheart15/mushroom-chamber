@@ -549,7 +549,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cool');
 
         rows.add([
-          data.timestamp.toIso8601String(),
+          _formatDateTimeForCSV(data.timestamp),
           data.temperature.toStringAsFixed(1),
           data.humidity.toStringAsFixed(1),
           data.soilMoisture.toStringAsFixed(1),
@@ -647,7 +647,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cooling');
 
         tableData.add([
-          '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
+          _formatTime12Hour(data.timestamp),
           data.temperature.toStringAsFixed(1),
           data.humidity.toStringAsFixed(1),
           data.soilMoisture.toStringAsFixed(1),
@@ -820,9 +820,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () async {
-          setState(() {
-            _currentData = _generateSensorData();
-          });
+          // Fetch real sensor data from backend instead of generating random data
+          final reading = await _sensorService.getSensorReading();
+          if (reading != null) {
+            setState(() {
+              _currentData = SensorData(
+                temperature: reading.temperature,
+                humidity: reading.humidity,
+                soilMoisture: reading.soilMoisture,
+                co2Level: reading.co2Level,
+                lightIntensity: reading.lightIntensity,
+                timestamp: reading.timestamp,
+                actuatorStatus: ActuatorStatus(
+                  exhaustFan1: _actuatorStatus.exhaustFan1,
+                  exhaustFan2: _actuatorStatus.exhaustFan2,
+                  mistMaker: _actuatorStatus.mistMaker,
+                  waterPump: _actuatorStatus.waterPump,
+                  ledGrowLight: _actuatorStatus.ledGrowLight,
+                  peltierWithFan: _actuatorStatus.peltierWithFan,
+                ),
+              );
+            });
+          }
         },
         child: SingleChildScrollView(
           physics: AlwaysScrollableScrollPhysics(),
@@ -1474,7 +1493,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         cells: [
                           DataCell(
                             Text(
-                              '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
+                              _formatTime12Hour(data.timestamp),
                               style: TextStyle(fontSize: 11),
                             ),
                           ),
@@ -1681,6 +1700,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       startIndex,
       endIndex > reversedList.length ? reversedList.length : endIndex,
     );
+  }
+
+  // Helper method to format time in 12-hour format with AM/PM
+  String _formatTime12Hour(DateTime dateTime) {
+    int hour = dateTime.hour;
+    String period = hour >= 12 ? 'PM' : 'AM';
+
+    // Convert to 12-hour format
+    if (hour == 0) {
+      hour = 12; // Midnight
+    } else if (hour > 12) {
+      hour = hour - 12;
+    }
+
+    String minute = dateTime.minute.toString().padLeft(2, '0');
+    String second = dateTime.second.toString().padLeft(2, '0');
+
+    return '$hour:$minute:$second $period';
+  }
+
+  // Helper method to format full date and time for CSV export
+  String _formatDateTimeForCSV(DateTime dateTime) {
+    String year = dateTime.year.toString();
+    String month = dateTime.month.toString().padLeft(2, '0');
+    String day = dateTime.day.toString().padLeft(2, '0');
+    String time12Hour = _formatTime12Hour(dateTime);
+
+    return '$year-$month-$day $time12Hour';
   }
 
 
