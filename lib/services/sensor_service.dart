@@ -178,6 +178,27 @@ class SensorService {
     }
   }
 
+  Future<bool> deleteAllSensorData() async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/sensors'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['success'] == true) {
+          print('Successfully deleted all sensor data: ${responseData['deletedCount']} records removed');
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      print('Error deleting all sensor data: $e');
+      return false;
+    }
+  }
+
   Future<bool> sendActuatorCommand(String device, bool state, {int? duration}) async {
     try {
       final response = await http.post(

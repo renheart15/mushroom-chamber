@@ -355,28 +355,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _sensorHistory.clear();
-                  _currentPage = 1;
-                });
+              onPressed: () async {
                 Navigator.of(context).pop();
+
+                // Show loading indicator
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
                         SizedBox(width: 12),
-                        Text('All sensor logs deleted successfully'),
+                        Text('Deleting all sensor data from database...'),
                       ],
                     ),
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.blue,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
+                    duration: Duration(seconds: 10),
                   ),
                 );
+
+                // Delete from database
+                final success = await _sensorService.deleteAllSensorData();
+
+                // Clear the snackbar
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                if (success) {
+                  setState(() {
+                    _sensorHistory.clear();
+                    _currentPage = 1;
+                  });
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white),
+                          SizedBox(width: 12),
+                          Text('All sensor data deleted from database successfully'),
+                        ],
+                      ),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.error, color: Colors.white),
+                          SizedBox(width: 12),
+                          Text('Failed to delete data from database'),
+                        ],
+                      ),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

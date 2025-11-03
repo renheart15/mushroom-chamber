@@ -164,6 +164,25 @@ router.delete('/old', async (req, res) => {
   }
 });
 
+// DELETE /api/sensors - Delete all sensor readings
+router.delete('/', async (req, res) => {
+  try {
+    const result = await SensorReading.deleteMany({});
+
+    res.json({
+      success: true,
+      message: `Deleted all sensor readings`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error deleting all sensor readings:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Helper function to calculate statistics
 function calculateStats(values) {
   if (values.length === 0) return null;
