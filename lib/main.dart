@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
+import 'dart:io' show Platform;
+import 'dart:convert';
 import 'services/sensor_service.dart';
+import 'package:csv/csv.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:universal_html/html.dart' as html;
 
 void main() {
   runApp(MushroomMonitoringApp());
@@ -91,12 +100,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<SensorReading>? _sensorSubscription;
   bool _useRealSensors = true;
   bool _isConnectedToSensors = false;
+  int _currentPage = 1;
+  final int _recordsPerPage = 20;
 
   @override
   void initState() {
     super.initState();
+    _loadHistoricalData();
     _initializeSensorConnection();
     _startDataCollection();
+  }
+
+  Future<void> _loadHistoricalData() async {
+    try {
+      print('Loading historical sensor data from database...');
+      final history = await _sensorService.getSensorHistory(limit: 1000);
+
+      if (history.isNotEmpty) {
+        setState(() {
+          _sensorHistory = history.map((reading) => SensorData(
+            temperature: reading.temperature,
+            humidity: reading.humidity,
+            soilMoisture: reading.soilMoisture,
+            co2Level: reading.co2Level,
+            lightIntensity: reading.lightIntensity,
+            timestamp: reading.timestamp,
+            actuatorStatus: ActuatorStatus(), // Historical data doesn't have actuator status
+          )).toList();
+        });
+        print('Loaded ${_sensorHistory.length} historical records from database');
+      } else {
+        print('No historical data found in database');
+      }
+    } catch (e) {
+      print('Error loading historical data: $e');
+    }
   }
 
   Future<void> _initializeSensorConnection() async {
@@ -127,9 +165,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               );
               _sensorHistory.add(_currentData!);
-              if (_sensorHistory.length > 50) {
-                _sensorHistory.removeAt(0);
-              }
               _updateActuatorStatus();
               _isConnectedToSensors = true;
             });
@@ -222,9 +257,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _currentData = newData;
           _sensorHistory.add(_currentData!);
-          if (_sensorHistory.length > 50) {
-            _sensorHistory.removeAt(0);
-          }
           _updateActuatorStatus();
         });
       }
@@ -292,6 +324,293 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _sensorService.sendActuatorCommand('peltierWithFan', _actuatorStatus.peltierWithFan);
         }
       }
+    }
+  }
+
+  void _showDeleteAllConfirmation() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 12),
+              Text('Delete All Logs?'),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to delete all ${_sensorHistory.length} sensor reading records? This action cannot be undone.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _sensorHistory.clear();
+                  _currentPage = 1;
+                });
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 12),
+                        Text('All sensor logs deleted successfully'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('Delete All', style: TextStyle(fontSize: 14)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _exportToCSV() async {
+    try {
+      // Create CSV data
+      List<List<dynamic>> rows = [];
+
+      // Add header row
+      rows.add([
+        'Timestamp',
+        'Temperature (°C)',
+        'Humidity (%)',
+        'Soil Moisture (%)',
+        'CO2 Level (ppm)',
+        'Light Intensity (lux)',
+        'Active Devices'
+      ]);
+
+      // Add data rows
+      for (var data in _sensorHistory.reversed) {
+        List<String> activeDevices = [];
+        if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan1');
+        if (data.actuatorStatus.exhaustFan2) activeDevices.add('Fan2');
+        if (data.actuatorStatus.mistMaker) activeDevices.add('Mist');
+        if (data.actuatorStatus.waterPump) activeDevices.add('Pump');
+        if (data.actuatorStatus.ledGrowLight) activeDevices.add('Light');
+        if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cool');
+
+        rows.add([
+          data.timestamp.toIso8601String(),
+          data.temperature.toStringAsFixed(1),
+          data.humidity.toStringAsFixed(1),
+          data.soilMoisture.toStringAsFixed(1),
+          data.co2Level.toStringAsFixed(0),
+          data.lightIntensity.toStringAsFixed(0),
+          activeDevices.isEmpty ? 'None' : activeDevices.join(', ')
+        ]);
+      }
+
+      // Convert to CSV string
+      String csv = const ListToCsvConverter().convert(rows);
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0];
+      final fileName = 'mushroom_sensor_data_$timestamp.csv';
+
+      // Web platform: Download file using browser
+      final bytes = utf8.encode(csv);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.document.createElement('a') as html.AnchorElement
+        ..href = url
+        ..style.display = 'none'
+        ..download = fileName;
+      html.document.body?.children.add(anchor);
+      anchor.click();
+      html.document.body?.children.remove(anchor);
+      html.Url.revokeObjectUrl(url);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('CSV downloaded successfully!'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text('Error exporting CSV: $e')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportToPDF() async {
+    try {
+      final pdf = pw.Document();
+
+      // Prepare data for table
+      List<List<String>> tableData = [];
+
+      // Add rows
+      for (var data in _sensorHistory.reversed) {
+        List<String> activeDevices = [];
+        if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan1');
+        if (data.actuatorStatus.exhaustFan2) activeDevices.add('Fan2');
+        if (data.actuatorStatus.mistMaker) activeDevices.add('Mist');
+        if (data.actuatorStatus.waterPump) activeDevices.add('Pump');
+        if (data.actuatorStatus.ledGrowLight) activeDevices.add('Light');
+        if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cooling');
+
+        tableData.add([
+          '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}:${data.timestamp.second.toString().padLeft(2, '0')}',
+          data.temperature.toStringAsFixed(1),
+          data.humidity.toStringAsFixed(1),
+          data.soilMoisture.toStringAsFixed(1),
+          data.co2Level.toStringAsFixed(0),
+          data.lightIntensity.toStringAsFixed(0),
+          activeDevices.isEmpty ? 'None' : activeDevices.join(', ')
+        ]);
+      }
+
+      // Create PDF pages
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Mushroom Farm Sensor Data',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text(
+                      'Exported: ${DateTime.now().toString().split('.')[0]}',
+                      style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+                    ),
+                    pw.Text(
+                      'Total Records: ${_sensorHistory.length}',
+                      style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+                    ),
+                    pw.Divider(thickness: 2),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Table.fromTextArray(
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 8),
+                headerDecoration: pw.BoxDecoration(
+                  color: PdfColors.blue100,
+                ),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.center,
+                  5: pw.Alignment.center,
+                  6: pw.Alignment.centerLeft,
+                },
+                headers: ['Time', 'Temp\n(°C)', 'Humidity\n(%)', 'Soil\n(%)', 'CO2\n(ppm)', 'Light\n(lux)', 'Active Devices'],
+                data: tableData,
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Show PDF preview and allow user to save/print
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'mushroom_sensor_data_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0]}.pdf',
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('PDF generated successfully'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text('Error exporting PDF: $e')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
     }
   }
 
@@ -729,23 +1048,128 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Icon(Icons.history, color: Colors.blue, size: 28),
                 SizedBox(width: 12),
-                Text(
-                  'Data Logs',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+                Expanded(
+                  child: Text(
+                    'Data Logs',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 8),
-            Text(
-              'Historical sensor readings (last ${_sensorHistory.length} records)',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
+            if (_sensorHistory.isNotEmpty) ...[
+              SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _loadHistoricalData();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.white),
+                                SizedBox(width: 12),
+                                Text('Data refreshed from database'),
+                              ],
+                            ),
+                            backgroundColor: Colors.blue,
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.refresh, size: 16),
+                      label: Text('Refresh'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade400,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _exportToCSV(),
+                      icon: Icon(Icons.table_chart, size: 16),
+                      label: Text('Export CSV'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade400,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _exportToPDF(),
+                      icon: Icon(Icons.picture_as_pdf, size: 16),
+                      label: Text('Export PDF'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade400,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showDeleteAllConfirmation(),
+                      icon: Icon(Icons.delete_sweep, size: 16),
+                      label: Text('Delete All'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade400,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ],
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Historical sensor readings (${_sensorHistory.length} total records)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ),
+                if (_sensorHistory.length > _recordsPerPage)
+                  Text(
+                    'Page $_currentPage of ${(_sensorHistory.length / _recordsPerPage).ceil()}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+              ],
             ),
             SizedBox(height: 24),
             Container(
@@ -761,7 +1185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Data is logged every 5 seconds. Maximum 50 recent entries.',
+                      'Data is logged every 5 seconds. All entries are stored.',
                       style: TextStyle(
                         color: Colors.blue.shade700,
                         fontSize: 14,
@@ -870,7 +1294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ],
-                    rows: _sensorHistory.reversed.map((data) {
+                    rows: _getPaginatedData().map((data) {
                       // Get list of active device names
                       List<String> activeDevices = [];
                       if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan1');
@@ -996,9 +1420,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
+            if (_sensorHistory.length > _recordsPerPage) ...[
+              SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _currentPage > 1
+                        ? () {
+                            setState(() {
+                              _currentPage--;
+                            });
+                          }
+                        : null,
+                    icon: Icon(Icons.chevron_left, size: 18),
+                    label: Text('Previous'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade400,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      disabledForegroundColor: Colors.grey.shade600,
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Text(
+                      'Page $_currentPage of ${(_sensorHistory.length / _recordsPerPage).ceil()}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _currentPage < (_sensorHistory.length / _recordsPerPage).ceil()
+                        ? () {
+                            setState(() {
+                              _currentPage++;
+                            });
+                          }
+                        : null,
+                    icon: Icon(Icons.chevron_right, size: 18),
+                    label: Text('Next'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade400,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      disabledForegroundColor: Colors.grey.shade600,
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Center(
+                child: Text(
+                  'Showing ${(_currentPage - 1) * _recordsPerPage + 1} - ${(_currentPage * _recordsPerPage > _sensorHistory.length ? _sensorHistory.length : _currentPage * _recordsPerPage)} of ${_sensorHistory.length} records',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  List<SensorData> _getPaginatedData() {
+    final reversedList = _sensorHistory.reversed.toList();
+    final startIndex = (_currentPage - 1) * _recordsPerPage;
+    final endIndex = startIndex + _recordsPerPage;
+
+    if (startIndex >= reversedList.length) {
+      return [];
+    }
+
+    return reversedList.sublist(
+      startIndex,
+      endIndex > reversedList.length ? reversedList.length : endIndex,
     );
   }
 

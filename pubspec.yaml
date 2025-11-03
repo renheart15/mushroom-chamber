@@ -15,6 +15,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.1.0
   web_socket_channel: ^2.4.0
+  csv: ^6.0.0
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  path_provider: ^2.1.4
+  universal_html: ^2.2.4
 
 dev_dependencies:
   flutter_test:
