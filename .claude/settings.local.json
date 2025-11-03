@@ -8,7 +8,8 @@
       "Bash(dir:*)",
       "Bash(npm install:*)",
       "Bash(curl:*)",
-      "Bash(python -m json.tool:*)"
+      "Bash(python -m json.tool:*)",
+      "Bash(copy:*)"
     ],
     "deny": [],
     "ask": []

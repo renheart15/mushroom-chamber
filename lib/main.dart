@@ -94,6 +94,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   Timer? _timer;
+  Timer? _websocketTimeoutTimer;
   List<SensorData> _sensorHistory = [];
   SensorData? _currentData;
   ActuatorStatus _actuatorStatus = ActuatorStatus();
@@ -101,6 +102,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<SensorReading>? _sensorSubscription;
   bool _useRealSensors = true;
   bool _isConnectedToSensors = false;
+  bool _usingWebSocket = false;
+  DateTime? _lastWebSocketDataTime;
   int _currentPage = 1;
   final int _recordsPerPage = 20;
 
@@ -147,6 +150,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
            data.lightIntensity != 0.0;
   }
 
+  void _startWebSocketTimeout() {
+    _websocketTimeoutTimer?.cancel();
+    _websocketTimeoutTimer = Timer(Duration(seconds: 15), () {
+      // If no data received for 15 seconds, show zeros
+      if (_usingWebSocket && _lastWebSocketDataTime != null) {
+        final timeSinceLastData = DateTime.now().difference(_lastWebSocketDataTime!);
+        if (timeSinceLastData.inSeconds >= 15) {
+          print('No WebSocket data for 15 seconds - displaying zero values');
+          setState(() {
+            _currentData = SensorData(
+              temperature: 0.0,
+              humidity: 0.0,
+              soilMoisture: 0.0,
+              co2Level: 0.0,
+              lightIntensity: 0.0,
+              timestamp: DateTime.now(),
+              actuatorStatus: ActuatorStatus(),
+            );
+            _isConnectedToSensors = false;
+          });
+          // Don't save zeros to logs - _isValidSensorData will prevent it
+        }
+      }
+    });
+  }
+
   Future<void> _initializeSensorConnection() async {
     print('Attempting to connect to ESP32 sensors at ${_sensorService.baseUrl}');
     final testReading = await _sensorService.getSensorReading();
@@ -157,6 +186,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await _sensorService.connect();
         _sensorSubscription = _sensorService.sensorStream.listen(
           (reading) {
+            _lastWebSocketDataTime = DateTime.now();
+            _startWebSocketTimeout(); // Reset timeout on each data receive
+
             setState(() {
               _currentData = SensorData(
                 temperature: reading.temperature,
@@ -177,14 +209,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Only add to history if sensor data is valid (not all zeros)
               if (_isValidSensorData(_currentData!)) {
                 _sensorHistory.add(_currentData!);
+                print('Sensor data saved to logs: T=${reading.temperature}°C, H=${reading.humidity}%');
+              } else {
+                print('Sensor data is all zeros - NOT saved to logs');
               }
               _updateActuatorStatus();
               _isConnectedToSensors = true;
             });
-            print('WebSocket data received: T=${reading.temperature}°C, H=${reading.humidity}%');
           },
           onError: (error) {
-            print('WebSocket error: $error - using zero values');
+            print('WebSocket error: $error - displaying zero values');
             setState(() {
               _currentData = SensorData(
                 temperature: 0.0,
@@ -196,27 +230,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 actuatorStatus: ActuatorStatus(),
               );
               _isConnectedToSensors = false;
+              _usingWebSocket = false;
+            });
+            // Zero data won't be saved due to _isValidSensorData check
+          },
+          onDone: () {
+            print('WebSocket connection closed - displaying zero values');
+            setState(() {
+              _currentData = SensorData(
+                temperature: 0.0,
+                humidity: 0.0,
+                soilMoisture: 0.0,
+                co2Level: 0.0,
+                lightIntensity: 0.0,
+                timestamp: DateTime.now(),
+                actuatorStatus: ActuatorStatus(),
+              );
+              _isConnectedToSensors = false;
+              _usingWebSocket = false;
             });
           },
         );
         setState(() {
           _useRealSensors = true;
           _isConnectedToSensors = true;
+          _usingWebSocket = true;
         });
-        print('Successfully connected to ESP32 real sensors!');
+        _startWebSocketTimeout(); // Start timeout monitoring
+        print('Successfully connected to ESP32 WebSocket!');
       } catch (e) {
-        print('WebSocket connection failed, using HTTP polling: $e');
+        print('WebSocket connection failed, will use HTTP polling: $e');
         setState(() {
           _useRealSensors = true;
-          _isConnectedToSensors = true;
+          _isConnectedToSensors = false;
+          _usingWebSocket = false;
         });
       }
     } else {
       print('No ESP32 sensors found at ${_sensorService.baseUrl}');
-      print('Using zero values - no simulation mode');
+      print('Displaying zero values - no sensor data available');
       setState(() {
         _useRealSensors = true;
         _isConnectedToSensors = false;
+        _usingWebSocket = false;
         _currentData = SensorData(
           temperature: 0.0,
           humidity: 0.0,
@@ -232,7 +288,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _startDataCollection() {
     _timer = Timer.periodic(Duration(seconds: 5), (timer) async {
-      if (_useRealSensors) {
+      // Only use HTTP polling if WebSocket is not active
+      if (_useRealSensors && !_usingWebSocket) {
         final reading = await _sensorService.getSensorReading();
         SensorData newData;
         if (reading != null) {
@@ -253,7 +310,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           );
           _isConnectedToSensors = true;
-          print('Real sensor data updated: T=${reading.temperature}°C, H=${reading.humidity}%, Soil=${reading.soilMoisture}%');
+          print('HTTP polling - sensor data received: T=${reading.temperature}°C, H=${reading.humidity}%');
         } else {
           newData = SensorData(
             temperature: 0.0,
@@ -265,13 +322,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             actuatorStatus: ActuatorStatus(),
           );
           _isConnectedToSensors = false;
-          print('No sensor data received from ESP32 - displaying zero values');
+          print('HTTP polling - no sensor data received, displaying zero values');
         }
         setState(() {
           _currentData = newData;
           // Only add to history if sensor data is valid (not all zeros)
           if (_isValidSensorData(newData)) {
             _sensorHistory.add(_currentData!);
+            print('HTTP polling - sensor data saved to logs');
+          } else {
+            print('HTTP polling - sensor data is all zeros, NOT saved to logs');
           }
           _updateActuatorStatus();
         });
@@ -720,6 +780,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _websocketTimeoutTimer?.cancel();
     _sensorSubscription?.cancel();
     _sensorService.dispose();
     super.dispose();
