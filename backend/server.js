@@ -93,9 +93,40 @@ const server = app.listen(PORT, () => {
 
 // WebSocket Server for real-time updates
 const wss = new WebSocket.Server({ server });
+const SensorReading = require('./src/models/SensorReading');
 
 wss.on('connection', (ws) => {
   console.log('🔌 WebSocket client connected');
+
+  // Handle incoming messages (from ESP32)
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log('📡 Received sensor data from ESP32:', data);
+
+      // Check if this is sensor data from ESP32
+      if (data.temperature !== undefined && data.humidity !== undefined) {
+        // Save to database
+        const sensorReading = new SensorReading({
+          temperature: data.temperature,
+          humidity: data.humidity,
+          soilMoisture: data.soilMoisture,
+          co2Level: data.co2Level || data.co2,
+          lightIntensity: data.lightIntensity || data.light,
+          deviceId: data.deviceId || 'esp32-main',
+          timestamp: new Date()
+        });
+
+        await sensorReading.save();
+        console.log('💾 Sensor data saved to database');
+
+        // Broadcast to all connected WebSocket clients (Flutter apps)
+        broadcastSensorUpdate(sensorReading);
+      }
+    } catch (error) {
+      console.error('❌ Error processing WebSocket message:', error);
+    }
+  });
 
   ws.on('close', () => {
     console.log('🔌 WebSocket client disconnected');
