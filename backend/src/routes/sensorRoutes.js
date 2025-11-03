@@ -5,9 +5,10 @@ const SensorReading = require('../models/SensorReading');
 // POST /api/sensors - Create new sensor reading (from ESP32)
 router.post('/', async (req, res) => {
   try {
-    const { temperature, humidity, soilMoisture, co2Level, co2, lightIntensity, light, deviceId } = req.body;
+    const { temperature, humidity, soilMoisture, co2Level, co2, lightIntensity, light, deviceId, timestamp } = req.body;
 
     // Create new sensor reading with default values for missing fields
+    // Use the timestamp from ESP32 (Singapore time) if provided, otherwise use server time
     const sensorReading = new SensorReading({
       temperature: temperature || 0,
       humidity: humidity || 0,
@@ -15,7 +16,7 @@ router.post('/', async (req, res) => {
       co2Level: co2Level || co2 || 0,
       lightIntensity: lightIntensity || light || 0,
       deviceId: deviceId || 'esp32-main',
-      timestamp: new Date()
+      timestamp: timestamp ? new Date(timestamp) : new Date()
     });
 
     await sensorReading.save();
