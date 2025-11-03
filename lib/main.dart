@@ -871,14 +871,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                     rows: _sensorHistory.reversed.map((data) {
-                      int activeDevices = [
-                        data.actuatorStatus.exhaustFan1,
-                        data.actuatorStatus.exhaustFan2,
-                        data.actuatorStatus.mistMaker,
-                        data.actuatorStatus.waterPump,
-                        data.actuatorStatus.ledGrowLight,
-                        data.actuatorStatus.peltierWithFan,
-                      ].where((status) => status).length;
+                      // Get list of active device names
+                      List<String> activeDevices = [];
+                      if (data.actuatorStatus.exhaustFan1) activeDevices.add('Fan1');
+                      if (data.actuatorStatus.exhaustFan2) activeDevices.add('Fan2');
+                      if (data.actuatorStatus.mistMaker) activeDevices.add('Mist');
+                      if (data.actuatorStatus.waterPump) activeDevices.add('Pump');
+                      if (data.actuatorStatus.ledGrowLight) activeDevices.add('Light');
+                      if (data.actuatorStatus.peltierWithFan) activeDevices.add('Cool');
+
+                      String activeDevicesText = activeDevices.isEmpty ? 'None' : activeDevices.join(', ');
 
                       return DataRow(
                         cells: [
@@ -975,18 +977,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           DataCell(
                             Container(
-                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: activeDevices > 0 ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              constraints: BoxConstraints(maxWidth: 120),
                               child: Text(
-                                '$activeDevices/6',
+                                activeDevicesText,
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: activeDevices > 0 ? Colors.green : Colors.grey,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: activeDevices.isEmpty ? Colors.grey : Colors.green.shade700,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
